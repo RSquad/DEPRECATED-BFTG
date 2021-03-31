@@ -9,7 +9,7 @@ contract ContestGiver {
         require(_deployer == msg.sender, 100);
     }
 
-    function give(address addrMember, uint amount) public override {
+    function give(address addrMember, uint128 amount) public view {
         require(_deployer == msg.sender, 100);
         addrMember.transfer(amount, true, 1);
     }
