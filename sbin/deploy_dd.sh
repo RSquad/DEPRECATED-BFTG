@@ -26,7 +26,7 @@ giver $debot_address
 
 echo DEPLOY DEBOT
 dabi=$(cat $debot_abi | xxd -ps -c 20000)
-$tonoscli deploy $debot_tvc "{\"priceProv\":\"$price_provider\"}" --sign $debot_keys --abi $debot_abi
+# $tonoscli deploy $debot_tvc "{\"priceProv\":\"$price_provider\"}" --sign $debot_keys --abi $debot_abi
 $tonoscli call $debot_address setABI "{\"dabi\":\"$dabi\"}" --sign $debot_keys --abi $debot_abi
 echo SETTERS DEBOT
 sabi=$(cat ../data/Demiurge.abi.json | xxd -ps -c 20000)
@@ -37,19 +37,19 @@ sabi=$(cat ../data/Padawan.abi.json | xxd -ps -c 20000)
 $tonoscli call $debot_address setPadawanABI "{\"sabi\":\"$sabi\"}" --sign $debot_keys --abi $debot_abi
 sabi=$(cat ../data/Proposal.abi.json | xxd -ps -c 20000)
 $tonoscli call $debot_address setProposalABI "{\"sabi\":\"$sabi\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/VotingDebot.tvc | base64 --wrap=0 )
+si=$(cat ../data/VotingDebot.tvc | base64 )
 $tonoscli call $debot_address setVotingDebotImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/Proposal.tvc | base64 --wrap=0 )
+si=$(cat ../data/Proposal.tvc | base64 )
 $tonoscli call $debot_address setProposalImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/Padawan.tvc | base64 --wrap=0 )
+si=$(cat ../data/Padawan.tvc | base64 )
 $tonoscli call $debot_address setPadawanImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/Demiurge.tvc | base64 --wrap=0 )
+si=$(cat ../data/Demiurge.tvc | base64 )
 $tonoscli call $debot_address setDemiurgeImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/Contest.tvc | base64 --wrap=0 )
+si=$(cat ../data/Contest.tvc | base64 )
 $tonoscli call $debot_address setContestImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/JuryGroup.tvc | base64 --wrap=0 )
+si=$(cat ../data/JuryGroup.tvc | base64 )
 $tonoscli call $debot_address setJuryGroupImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
-si=$(cat ../data/JurorContract.tvc | base64 --wrap=0 )
+si=$(cat ../data/JurorContract.tvc | base64 )
 $tonoscli call $debot_address setJurorImage "{\"image\":\"$si\"}" --sign $debot_keys --abi $debot_abi
 
 echo DONE

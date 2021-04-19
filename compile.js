@@ -15,6 +15,16 @@ const smcNames = [
   "DemiurgeStore",
   "Demiurge",
   "JurorContract",
+  "VotingDebot",
+  "UserWallet",
+  "Proposal",
+  "PriceProvider",
+  "Padawan",
+  "Group",
+  "Debot",
+  "DemiurgeDebot",
+  "ContestDebot",
+  "ContestGiver",
 ];
 
 const compileScripts = [];
