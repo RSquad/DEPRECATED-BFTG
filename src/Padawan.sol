@@ -39,12 +39,12 @@ contract Padawan is Base, IPadawan, IPriceProviderCallback {
         uint256 depool;
     }
 
-    struct TipAccount {
+    /*struct TipAccount {
         address addr;
         uint256 walletKey;
         uint32 createdAt;
         uint128 balance;
-    }
+    }*/
 
     // ProposalDeployer address
     address static deployer;
@@ -444,7 +444,7 @@ contract Padawan is Base, IPadawan, IPriceProviderCallback {
         allDeposits = deposits;
     }
 
-    function getTokenAccounts() public view returns (mapping (address => TipAccount) allAccounts) {
+    function getTokenAccounts() external override view returns (mapping (address => TipAccount) allAccounts) {
         allAccounts = tokenAccounts;
     }
 

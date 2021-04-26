@@ -93,6 +93,27 @@ contract ContestDebot is Debot, IBaseData, IContestData, Upgradable {
         printMainInfo();
     }
 
+    /// @notice Returns Metadata about DeBot.
+    function getDebotInfo() public functionID(0xDEB) override view returns(
+        string name, string version, string publisher, string key, string author,
+        address support, string hello, string language, string dabi, bytes icon
+    ) {
+        name = "Contest Debot";
+        version = "0.2.0";
+        publisher = "RSquad";
+        key = "Create contest submissions and vote for them";
+        author = "RSquad";
+        support = address.makeAddrStd(0, 0x0);
+        hello = "Hello, i am Contest Debot.";
+        language = "en";
+        dabi = m_debotAbi.get();
+        icon = "";
+    }
+
+    function getRequiredInterfaces() public view override returns (uint256[] interfaces) {
+        return [ Terminal.ID, Menu.ID, AddressInput.ID, ConfirmInput.ID ];
+    }
+
     function printMainInfo() public {
         _getProposals();
         MenuItem[] items;
@@ -586,11 +607,6 @@ contract ContestDebot is Debot, IBaseData, IContestData, Upgradable {
             floatStr = "0" + floatStr;
         }
         return format("{}.{}", dec, floatStr);
-    }
-
-    function getVersion() public override returns (string name, uint24 semver) {
-        name = "Contest DeBot";
-        semver = (2 << 8) | 0;
     }
 
     function onCodeUpgrade() internal override {

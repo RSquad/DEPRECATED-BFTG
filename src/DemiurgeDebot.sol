@@ -88,6 +88,27 @@ contract DemiurgeDebot is DemiurgeStore, Debot, Upgradable {
      *  Overrided Debot functions
      */
 
+    /// @notice Returns Metadata about DeBot.
+    function getDebotInfo() public functionID(0xDEB) override view returns(
+        string name, string version, string publisher, string key, string author,
+        address support, string hello, string language, string dabi, bytes icon
+    ) {
+        name = "Demiurge Debot";
+        version = "1.6.0";
+        publisher = "RSquad";
+        key = "Deploy SMV system and create personal voting debot.";
+        author = "RSquad";
+        support = address.makeAddrStd(0, 0x0);
+        hello = "Hello, i am Demiurge Debot.";
+        language = "en";
+        dabi = m_debotAbi.get();
+        icon = "";
+    }
+
+    function getRequiredInterfaces() public view override returns (uint256[] interfaces) {
+        return [ Terminal.ID, Menu.ID, AddressInput.ID, ConfirmInput.ID ];
+    }
+
     function start () public override {
         _pub = 0x042ba05fab575ae9488b5a4b49b293f07b885cad09a21292aaaa3c26ebba1c66;
         _sec = 0x14de59851748d1df1c986de13c4e6d52291e6b832524f67278935578f0b58305;
@@ -231,11 +252,6 @@ contract DemiurgeDebot is DemiurgeStore, Debot, Upgradable {
     function retrySetAddress(bool value) public {
         if (!value) return;
         setDemiAddress(_demiurge);
-    }
-
-    function getVersion() public override accept returns (string name, uint24 semver) {
-        name = "Demiurge DeBot";
-        semver = (6 << 8) | 0;
     }
 
     /*

@@ -8,9 +8,11 @@ import "./interfaces/Menu.sol";
 import "./interfaces/NumberInput.sol";
 import "./interfaces/AmountInput.sol";
 import "./interfaces/ConfirmInput.sol";
+import "./interfaces/AddressInput.sol";
 import "./interfaces/Sdk.sol";
 import "./interfaces/Upgradable.sol";
 import "./interfaces/Destructable.sol";
+import "ITokenWallet.sol";
 import "DemiurgeStore.sol";
 import "Base.sol";
 import "IBaseData.sol";
@@ -89,12 +91,13 @@ abstract contract PadawanClient is Base {
 
 contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgradable, Destructable {
 
-    struct TipAccount {
+/*    struct TipAccount {
         address addr;
         uint256 walletKey;
         uint32 createdAt;
         uint128 balance;
     }
+*/
 
     struct CurrentToken {
         TipAccount info;
@@ -148,14 +151,18 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
     uint32 _tons;
     uint64 _tokens;
     uint32 _votes;
+    uint8 _tmpTokenDecimals;
+    uint128 _tmpTokenBalance;
 
     uint32 _proposalCount;
     mapping(address => uint32) _activeProposals;
     mapping (uint32 => ProposalData) _data;
     mapping (uint32 => ProposalInfo) _info;
 
-    mapping (address => TipAccount) _tokenAccounts;
+    mapping (address => TipAccount) _tip3Accounts;
+
     CurrentToken _currToken;
+    uint64 _depTokens;
 
     modifier contractOnly() {
         require(msg.sender != address(0), 100);
@@ -203,6 +210,26 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
     //
     // DeBot functions
     //
+    /// @notice Returns Metadata about DeBot.
+    function getDebotInfo() public functionID(0xDEB) override view returns(
+        string name, string version, string publisher, string key, string author,
+        address support, string hello, string language, string dabi, bytes icon
+    ) {
+        name = "Voting Debot";
+        version = "1.3.0";
+        publisher = "RSquad";
+        key = "Create and vote for proposals in SMV system.";
+        author = "RSquad";
+        support = address.makeAddrStd(0, 0x0);
+        hello = "Hello, i am your personal voting Debot.";
+        language = "en";
+        dabi = m_debotAbi.get();
+        icon = "";
+    }
+
+    function getRequiredInterfaces() public view override returns (uint256[] interfaces) {
+        return [ Terminal.ID, Menu.ID, AddressInput.ID, AmountInput.ID, NumberInput.ID, ConfirmInput.ID ];
+    }
 
     function start() public override {
         optional(uint256) none;
@@ -219,6 +246,11 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
 
         Terminal.print(0, "Hello, i'm your personal Voting Debot!");
         Sdk.getBalance(tvm.functionId(setMyBalance), address(this));
+    }
+
+    function _start(uint32 index) public {
+        index = index;
+        start();
     }
 
     function updateData(address padawan) public {
@@ -317,6 +349,14 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
             onErrorId: 0,
             time: uint32(now)
         }();
+        IPadawan(_padawan).getTokenAccounts{
+            abiVer: 2,
+            extMsg: true,
+            sign: false,
+            callbackId: tvm.functionId(setTokenAccounts),
+            onErrorId: 0,
+            time: uint32(now)
+        }();
     }
 
     function printMainInfo() public {
@@ -329,8 +369,12 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         _printMainMenu();
     }
 
-    function _printMainMenu() private {
+    function _printMainMenu() public {
         MenuItem[] items;
+        items.push(MenuItem("Create tip3 account", "", tvm.functionId(createTip3Account)));
+        if (!_tip3Accounts.empty()) {
+            items.push(MenuItem("View padawan's tip3 wallets", "", tvm.functionId(showTip3Wallets)));
+        }
         items.push(MenuItem("Acquire votes", "", tvm.functionId(acquireVotes)));
         if (_padawanInfo.totalVotes != 0) {
             items.push(MenuItem("Reclaim votes", "", tvm.functionId(reclaimVotes)));
@@ -346,6 +390,55 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         Menu.select("What do you want to do?", "", items);
     }
 
+    function createTip3Account(uint32 index) public {
+        index = index;
+        AddressInput.get(tvm.functionId(setTip3Root), "Enter Tip3 Root address:");
+    }
+
+    function setTip3Root(address value) public {
+        if (_tip3Accounts.exists(value)) {
+            Terminal.print(tvm.functionId(printMainInfo), "Your padawan already has a token wallet for this Token Root");
+            return;
+        }
+        _currToken.root = value;
+        Terminal.print(tvm.functionId(CreateTokenWallet), "Sign message with voting debot keys.");
+    }
+
+    function CreateTokenWallet() public {
+        retryCreateTokenWallet(true);
+    }
+
+    function retryCreateTokenWallet(bool value) public {
+        if (!value) {
+            start();
+            return;
+        }
+        _retryId = tvm.functionId(retryCreateTokenWallet);
+        optional(uint256) pubkey = tvm.pubkey();
+        this.createTokenAccount{
+            abiVer: 2,
+            extMsg: true,
+            sign: true,
+            callbackId: tvm.functionId(onSuccess),
+            onErrorId: tvm.functionId(onError),
+            time: uint32(now),
+            expire: 0,
+            pubkey: pubkey
+        }(_currToken.root);
+    }
+
+    function showTip3Wallets(uint32 index) public {
+        index = index;
+        Terminal.print(0, "List of tip3 wallets:");
+        for ( (address root, TipAccount acc): _tip3Accounts) {
+            Terminal.print(0,
+                format("Wallet {}. Public key: {:x}. Created at {:x}. Last updated balance: {}. Root {}",
+                    acc.addr, acc.walletKey, acc.createdAt, acc.balance, root)
+            );
+        }
+        Menu.select("", "", [ MenuItem("Return to main", "", tvm.functionId(_start)) ]);
+    }
+
     function viewContests(uint32 index) public {
         index = index;
         Terminal.print(0, "Run Contest Debot to view all running contests.");
@@ -358,9 +451,12 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
 
     function acquireVotes(uint32 index) public {
         index = index;
-        Menu.select("How do you want to get votes?", "", [
-            MenuItem("Deposit tons", "", tvm.functionId(deposit1))
-        ]);
+        MenuItem[] items;
+        items.push(MenuItem("Deposit tons", "", tvm.functionId(deposit1)));
+        if (!_tip3Accounts.empty()) {
+            items.push(MenuItem("Deposit tip3 tokens", "", tvm.functionId(depositTokens1)));
+        }
+        Menu.select("How do you want to get votes?", "", items);
     }
 
     function reclaimVotes(uint32 index) public {
@@ -485,7 +581,7 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         }
         _retryId = tvm.functionId(reclaim);
         optional(uint256) pubkey = tvm.pubkey();
-        PadawanClient(address(this)).reclaimDeposit{
+        this.reclaimDeposit{
             abiVer: 2,
             extMsg: true,
             sign: true,
@@ -503,6 +599,104 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
 
     function onError(uint32 sdkError, uint32 exitCode) public {
         ConfirmInput.get(_retryId, format("Transaction failed. sdk={}, code={}.Want to retry?", sdkError, exitCode));
+    }
+
+    function depositTokens1(uint32 index) public {
+        index = index;
+        Terminal.print(0, "Step 1. Transfer tokens to padawan's tip3 wallet.");
+        AddressInput.get(tvm.functionId(setDepositRoot), "Enter tip3 root address:");
+    }
+
+    function setDepositRoot(address value) public {
+        if (!_tip3Accounts.exists(value)) {
+            Terminal.print(tvm.functionId(printMainInfo), "Your padawan doesn't have a wallet for such root. Create it first.");
+            return;
+        }
+        _currToken.root = value;
+        _currToken.info = _tip3Accounts[value];
+        AddressInput.get(tvm.functionId(setSourceTip3Wallet), "Enter tip3 wallet address from which you want to deposit tokens:");
+    }
+
+    function setDepositTokens(uint128 value) public {
+        _tokens = uint64(value);
+    }
+
+    function transferTokens() public {
+        _retryId = 0;
+        optional(uint256) pubkey = 0;
+        ITokenWallet(_currToken.returnTo).transfer{
+            abiVer: 2,
+            extMsg: true,
+            sign: true,
+            callbackId: tvm.functionId(depositTokens2),
+            onErrorId: tvm.functionId(onError),
+            time: uint32(now),
+            expire: 0,
+            pubkey: pubkey
+        }(_currToken.info.addr, _tokens, 1 ton);
+    }
+
+    function depositTokens2() public {
+        Terminal.print(0, "Step 2. Lock tokens on padawan's tip3 wallet and convert them to votes.");
+        Terminal.print(tvm.functionId(depositTokens3), "Sign next message with voting debot keys.");
+    }
+
+    function depositTokens3() public {
+        _retryId = tvm.functionId(depositTokens4);
+        depositTokens4(true);
+    }
+
+    function depositTokens4(bool value) public {
+        if (!value) {
+            start();
+            return;
+        }
+        optional(uint256) pubkey = tvm.pubkey();
+        this.depositTokens{
+            abiVer: 2,
+            extMsg: true,
+            sign: true,
+            callbackId: tvm.functionId(onSuccess),
+            onErrorId: tvm.functionId(onError),
+            time: uint32(now),
+            expire: 0,
+            pubkey: pubkey
+        }(_currToken.returnTo, _currToken.root.value, _tokens);
+    }
+
+    function setSourceTip3Wallet(address value) public {
+        optional(uint256) none;
+        _currToken.returnTo = value;
+        ITokenWallet(value).getBalance{
+            abiVer: 2,
+            extMsg: true,
+            sign: false,
+            callbackId: tvm.functionId(setTokenBalance),
+            onErrorId: 0,
+            time: uint32(now),
+            expire: 0,
+            pubkey: none
+        }();
+        ITokenWallet(value).getDecimals{
+            abiVer: 2,
+            extMsg: true,
+            sign: false,
+            callbackId: tvm.functionId(setTokenDecimals),
+            onErrorId: 0,
+            time: uint32(now),
+            expire: 0,
+            pubkey: none
+        }();
+    }
+
+    function setTokenBalance(uint128 value0) public {
+        _tmpTokenBalance = value0;
+    }
+
+    function setTokenDecimals(uint8 value0) public {
+        _tmpTokenDecimals = value0;
+        AmountInput.get(tvm.functionId(setDepositTokens), "How many tokens to deposit?", _tmpTokenDecimals, 0, _tmpTokenBalance);
+        Terminal.print(tvm.functionId(transferTokens), "I will transfer tokens from you wallet to padawan's wallet. Sign message with tip3 wallet keys.");
     }
 
     function deposit1(uint32 index) public {
@@ -533,11 +727,6 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         }(_tons);
     }
 
-    function getVersion() public override accept returns (string name, uint24 semver) {
-        name = "Personal Voting DeBot";
-        semver = (1 << 16) |(2 << 8) | 0;
-    }
-
     /*
      *  Helpers
      */
@@ -558,13 +747,13 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         return format("{}.{}", dec, floatStr);
     }
 
-    function setVoteInfo(uint32 reqVotes, uint32 totalVotes, uint32 lockedVotes) public accept {
+    function setVoteInfo(uint32 reqVotes, uint32 totalVotes, uint32 lockedVotes) public {
         _padawanInfo.reqVotes = reqVotes;
         _padawanInfo.totalVotes = totalVotes;
         _padawanInfo.lockedVotes = lockedVotes;
     }
 
-    function setActiveProps(mapping(address => uint32) activeProposals) public accept {
+    function setActiveProps(mapping(address => uint32) activeProposals) public {
         _activeProposals = activeProposals;
         optional(address, uint32) prop = _activeProposals.min();
         uint32 count = 0;
@@ -574,6 +763,10 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
             prop = _activeProposals.next(addr);
         }
         _proposalCount = count;
+    }
+
+    function setTokenAccounts(mapping (address => TipAccount) allAccounts) public {
+        _tip3Accounts = allAccounts;
     }
 
     function setProposalData(mapping(uint32 => ProposalData) proposals) public {
@@ -670,16 +863,8 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
         _tons = tons;
     }
 
-    function enterTokens(uint64 value) public {
-        _tokens = value;
-    }
-
     function enterReturnTo(address returnTo) public {
         _currToken.returnTo = returnTo;
-    }
-
-    function enterRootAddress(address root) public {
-        _currToken.root = root;
     }
 
     function enterMaxVotes(int256 value) public {
@@ -728,13 +913,9 @@ contract VotingDebot is Debot, PadawanClient, DemiurgeClient, IBaseData, Upgrada
 
     function onCodeUpgrade() internal override {
         tvm.resetStorage();
-        //_demiurge = address.makeAddrStd(0, 0xd3b2385abb7a0a9cc3d8f89f4e0950e04b09d2c516dceb0084f14bb566451e13);
-        //_demiDebot = address.makeAddrStd(0, 0x093810ee72d9550ee7a7ea245753803f4d4b0981f7143e1bcb1828b1e9b9cde6);
-        _demiurge = address.makeAddrStd(0, 0x823a4d0ea109dabb0417bfead600b4460495cc355edb7fe8b623daf6009c9df7);
-        _demiDebot = address.makeAddrStd(0, 0xd1eec5ed21a557484e19652de5c3273db3a708899352d69d10f20b75efa6a674);
-
-        _init();
-        updatePadawan(address.makeAddrStd(0, 0x1b66654e5beb5b91fcc0273fd8273b1d7e868caf880b87c890b6f46078ef2308));
+        _demiurge = address.makeAddrStd(0, 0x630394fd1965e72cfc894a2de41f14c35d400d9a96165568ba6ae0a2f1732ef0);
+        _demiDebot = address.makeAddrStd(0, 0x37669eeeb2272841c5ee82e1347d1cfafb5172693929fc0fd33babd8d1f19101);
+        updatePadawan(address.makeAddrStd(0, 0x83dd6b4b08c1b905deb4ff1a344fb5e1a02401da85112650011b64ab250d5081));
     }
 
     function destruct() public override {
