@@ -1,53 +1,67 @@
-const fs = require("fs");
-const shell = require("shelljs");
+const fs = require('fs');
+const {exec} = require('child_process');
 
-if (!shell.which("git")) {
-  shell.echo("Sorry, this script requires git");
-  shell.exit(1);
-}
+const execPromise = cmd => {
+  return new Promise(function (resolve, reject) {
+    exec(cmd, function (err, stdout) {
+      if (err) return reject(err);
+      resolve(stdout);
+    });
+  });
+};
 
-const smcNames = [
-  "JuryGroup",
-  "Voting",
-  "TagsResolve",
-  "Contest",
-  "TestDeployer",
-  "DemiurgeStore",
-  "Demiurge",
-  "JurorContract",
-  "VotingDebot",
-  "UserWallet",
-  "Proposal",
-  "PriceProvider",
-  "Padawan",
-  "Group",
-  "Debot",
-  "DemiurgeDebot",
-  "ContestDebot",
-  "ContestGiver",
-];
+const compile = smcNames => {
+  const compileScripts = [];
+  if (!fs.existsSync('build')) compileScripts.push(`mkdir build`);
+  if (!fs.existsSync('ton-packages')) compileScripts.push(`mkdir ton-packages`);
 
-const compileScripts = [];
+  smcNames.forEach(name => {
+    compileScripts.push(`npx tondev sol compile -o ./build ./src/${name}.sol`);
+  });
 
-smcNames.forEach((name) => {
-  compileScripts.push(`npx tondev sol compile ./src/${name}.sol`);
-  compileScripts.push(`mv ./src/${name}.abi.json ./build/${name}.abi.json`);
-  compileScripts.push(`mv ./src/${name}.tvc ./build/${name}.tvc`);
-});
+  compileScripts
+    .reduce(
+      (p, cmd) =>
+        p.then(results =>
+          execPromise(cmd).then(stdout => {
+            results.push(stdout);
+            return results;
+          }),
+        ),
+      Promise.resolve([]),
+    )
+    .then(
+      (/* results */) => {
+        smcNames.forEach(name => {
+          const abiRaw = fs.readFileSync(`./build/${name}.abi.json`);
+          const abi = JSON.parse(abiRaw);
+          const image = fs.readFileSync(`./build/${name}.tvc`, {
+            encoding: 'base64',
+          });
 
-compileScripts.forEach((script) => {
-  shell.exec(script);
-});
+          fs.writeFileSync(
+            `./ton-packages/${name}.package.ts`,
+            `export default ${JSON.stringify({abi, image})}`,
+          );
+        });
+      },
+      console.log,
+    );
+};
 
-smcNames.forEach((name) => {
-  const abiRaw = fs.readFileSync(`./build/${name}.abi.json`);
-  const abi = JSON.parse(abiRaw);
-  const image = fs.readFileSync(`./build/${name}.tvc`, { encoding: "base64" });
+module.exports = {
+  compile,
+};
 
-  fs.writeFileSync(
-    `./ton-packages/${name}.package.ts`,
-    `export default ${JSON.stringify({ abi, image })}`
-  );
-});
-
-shell.exit(0);
+compile([
+  'BftgRootStore',
+  'BftgRoot',
+  'SmvRootStore',
+  'SmvRoot',
+  'Proposal',
+  'Padawan',
+  'Group',
+  'ProposalFactory',
+  'JuryGroup',
+  'Contest',
+]);
