@@ -1,32 +1,37 @@
 pragma ton-solidity >= 0.36.0;
 
-import "IJuryGroup.sol";
-import "IJuryGroupCallback.sol";
-
-// 100 - sender is not deployer
-// 101 - only inbound messages
-// 200 - not enough value
-// 201 - not enough value
-// 202 - not enough balance to withdraw
+import "./interfaces/IJuryGroup.sol";
 
 contract JuryGroup is IJuryGroup {
+    modifier onlyDeployer() {
+        require(msg.sender == _deployer, 100);
+        _;
+    }
+
     string static public _tag;
-    address static public _deployer;
+    address static _deployer;
 
     mapping(address => Member) public _members;
     uint32 _membersCounter;
 
-    constructor() public {
+    constructor(address[] initialMembers) public {
         require(_deployer == msg.sender, 100);
+        for(uint8 i = 0; i < initialMembers.length; i++) {
+            _addMember(initialMembers[i], 0);
+        }
     }
 
-    function registerMember(address addrMember, uint pkMember) public override {
+    function registerMember(address addrMember) public override onlyDeployer {
         if(_members.exists(addrMember) == false) {
-            _members[addrMember] = Member(_membersCounter, msg.value, addrMember, pkMember);
-            _membersCounter++;
+            _addMember(addrMember, msg.value);
         } else {
             _members[addrMember].balance += msg.value;
         }
+    }
+
+    function _addMember(address addrMember, uint128 value) private inline {
+        _members[addrMember] = Member(_membersCounter, value, addrMember);
+        _membersCounter++;
     }
 
     function withdraw(uint128 amount) public {
