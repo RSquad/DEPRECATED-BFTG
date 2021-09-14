@@ -6,5 +6,5 @@ struct JuryGroupPending {
 }
 
 interface IBftgRoot {
-    function registerMemberJuryGroup(string tag, address addrMember) external;
+    function registerMemberJuryGroup(string tag, address addrMember, uint32 contestId) external;
 }

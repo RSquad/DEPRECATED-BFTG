@@ -3,101 +3,48 @@ pragma ton-solidity >= 0.45.0;
 pragma AbiHeader expire;
 pragma AbiHeader time;
 
-import './Base.sol';
-import './Glossary.sol';
 import './interfaces/IProposalFactory.sol';
-import './interfaces/ISmvRoot.sol';
+import '../crystal-smv/src/interfaces/ISmvRoot.sol';
 
-import {Errors} from './Errors.sol';
+import './Errors.sol';
+import './Fees.sol';
 
-contract ProposalFactory is Base {
-    address static _deployer;
+contract ProposalFactory is IProposalFactory {
+    address _addrSmvRoot;
     
-    constructor() public onlyContract {
-        require(_deployer == msg.sender, Errors.ONLY_DEPLOYER);
+    constructor(address addrSmvRoot) public {
+        tvm.accept();
+        // optional(TvmCell) optSalt = tvm.codeSalt(tvm.code());
+        // require(optSalt.hasValue());
+        // (address addrSmvRoot) = optSalt.get().toSlice().decode(address);
+        _addrSmvRoot = addrSmvRoot;
     }
 
     function deployContestProposal(
         address client,
         string title,
-        address group,
+        address[] whiteList,
+        uint128 totalVotes,
         ContestProposalSpecific specific
-    ) external view onlyContract {
-        require(msg.value >= DEPLOY_PROPOSAL_PAY + 1 ton);
+    ) public override {
+        require(msg.sender != address(0), Errors.INVALID_CALLER);
+        require(msg.value >= Fees.DEPLOY_DEFAULT + Fees.PROCESS, Errors.INVALID_VALUE);
         TvmBuilder b;
         b.store(specific);
         TvmCell cellSpecific = b.toCell();
-        address[] arr;
-        ISmvRoot(_deployer).deployProposal
-            {value: 0, flag: 64, bounce: true}
+        ISmvRoot(_addrSmvRoot).deployProposal
+            {value: Fees.DEPLOY_DEFAULT + Fees.PROCESS_SM, flag: 1, bounce: true}
             (
                 client,
                 title,
-                1 ton,
-                1000000000,
-                address(0),
-                group,
-                arr,
+                totalVotes,
+                whiteList,
                 'contest',
                 cellSpecific
             );
-    }
 
-    function deployRemoveMemberProposal(
-        address client,
-        string title,
-        uint128 votePrice,
-        uint128 voteTotal,
-        address voteProvider,
-        address group,
-        address[] whiteList,
-        RemoveMemberProposalSpecific specific
-    ) external view onlyContract {
-        require(msg.value >= DEPLOY_PROPOSAL_PAY + 1 ton);
-        TvmBuilder b;
-        b.store(specific);
-        TvmCell cellSpecific = b.toCell();
-        ISmvRoot(_deployer).deployProposal
-            {value: 0, flag: 64, bounce: true}
-            (
-                client,
-                title,
-                votePrice,
-                voteTotal,
-                voteProvider,
-                group,
-                whiteList,
-                'remove-member',
-                cellSpecific
-            );
-    }
-
-    function deployAddMemberProposal(
-        address client,
-        string title,
-        uint128 votePrice,
-        uint128 voteTotal,
-        address voteProvider,
-        address group,
-        address[] whiteList,
-        AddMemberProposalSpecific specific
-    ) external view onlyContract {
-        require(msg.value >= DEPLOY_PROPOSAL_PAY + 1 ton);
-        TvmBuilder b;
-        b.store(specific);
-        TvmCell cellSpecific = b.toCell();
-        ISmvRoot(_deployer).deployProposal
-            {value: 0, flag: 64, bounce: true}
-            (
-                client,
-                title,
-                votePrice,
-                voteTotal,
-                voteProvider,
-                group,
-                whiteList,
-                'add-member',
-                cellSpecific
-            );
+        // TODO
+        // tvm.rawReserve(Fees.DEPLOY_DEFAULT, 4);
+        // msg.sender.transfer(0, false, 128);
     }
 }

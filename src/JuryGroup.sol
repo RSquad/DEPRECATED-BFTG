@@ -9,15 +9,19 @@ contract JuryGroup is IJuryGroup {
     }
 
     string static public _tag;
-    address static _deployer;
+    address _deployer;
 
     mapping(address => Member) public _members;
     uint32 _membersCounter;
 
     constructor(address[] initialMembers) public {
-        require(_deployer == msg.sender, 100);
+        optional(TvmCell) optSalt = tvm.codeSalt(tvm.code());
+        require(optSalt.hasValue(), 102);
+        (address deployer) = optSalt.get().toSlice().decode(address);
+        require(msg.sender == deployer, 100);
+        _deployer = deployer;
         for(uint8 i = 0; i < initialMembers.length; i++) {
-            _addMember(initialMembers[i], 0);
+            _addMember(initialMembers[i], 10);
         }
     }
 

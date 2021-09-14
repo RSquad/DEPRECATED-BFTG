@@ -1,20 +1,26 @@
-pragma ton-solidity >=0.36.0;
+pragma ton-solidity >=0.47.0;
+
 pragma AbiHeader expire;
 pragma AbiHeader time;
 
-import './Base.sol';
 import './interfaces/IBftgRootStore.sol';
 
-contract BftgRootStore is Base, IBftgRootStore {
+import './Errors.sol';
+
+contract BftgRootStore is IBftgRootStore {
 
     mapping(uint8 => address) public _addrs;
     mapping(uint8 => TvmCell) public _codes;
 
-    function setJuryGroupCode(TvmCell code) public override signed {
+    function setJuryGroupCode(TvmCell code) public override {
+        require(msg.pubkey() == tvm.pubkey(), Errors.INVALID_CALLER);
+        tvm.accept();
         _codes[uint8(ContractCode.JuryGroup)] = code;
     }
 
-    function setContestCode(TvmCell code) public override signed {
+    function setContestCode(TvmCell code) public override {
+        require(msg.pubkey() == tvm.pubkey(), Errors.INVALID_CALLER);
+        tvm.accept();
         _codes[uint8(ContractCode.Contest)] = code;
     }
     

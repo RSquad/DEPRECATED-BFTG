@@ -1,4 +1,4 @@
-pragma ton-solidity >= 0.43.0;
+pragma ton-solidity >= 0.47.0;
 
 import './Checks.sol';
 import './interfaces/IContest.sol';
@@ -22,17 +22,38 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
 /*                                 ANCHOR Init                                */
 /* -------------------------------------------------------------------------- */
 
+    uint32 static public _id;
+    address public _addrBftgRoot;
+
     string[] public _tags;
     mapping(address => bool) _tagsPendings;
-    mapping(address => Member) public _jury;
-    address static _deployer;
 
+    mapping(address => Member) public _jury;
+    uint128 _maxJuryStake;
+    uint32 public _juryCount;
+    uint128 public _juryStake;
+
+    string public _description;
     uint128 public _prizePool;
     uint32 public _underwayDuration;
     uint32 public _underwayEnds;
+    
+    uint8 constant PERIOD_COEF = 3;
 
-    constructor(address addrBftgRootStore, string[] tags, uint128 prizePool, uint32 underwayDuration) public {
-        require(msg.sender == _deployer, 101);
+    constructor(
+        address addrBftgRootStore,
+        string[] tags,
+        uint128 prizePool,
+        uint32 underwayDuration,
+        string description
+    ) public {
+        optional(TvmCell) oSalt = tvm.codeSalt(tvm.code());
+        require(oSalt.hasValue());
+        (address addrBftgRoot) = oSalt.get().toSlice().decode(address);
+        require(msg.sender == addrBftgRoot);
+        _addrBftgRoot = addrBftgRoot;
+
+        _description = description;
         _tags = tags;
         _stage = ContestStage.New;
         _prizePool = prizePool;
@@ -48,7 +69,7 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
         if(_isCheckListEmpty() && !_inited) {
             _inited = true;
             for(uint8 i = 0; i < _tags.length; i++) {
-                TvmCell state = _buildJuryGroupState(_tags[i], _deployer);
+                TvmCell state = _buildJuryGroupState(_tags[i], _addrBftgRoot);
                 uint256 hashState = tvm.hash(state);
                 address addrJuryGroup = address.makeAddrStd(0, hashState);
                 _tagsPendings[addrJuryGroup] = true;
@@ -88,8 +109,28 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
         require(_tagsPendings.exists(msg.sender), 102);
         delete _tagsPendings[msg.sender];
         for((, Member member): members) {
-            if(member.balance >= 0) {
-                _jury[member.addr] = member;
+            if(member.balance > 0) {
+                if(member.balance >= _maxJuryStake) {
+                    _maxJuryStake = member.balance;
+                    uint128 threshold = member.balance - uint128(math.muldivr(member.balance, 9, 10));
+                    optional(address, Member) oJuryMember = _jury.min();
+                    while (oJuryMember.hasValue()) {
+                        (address addr, Member member_) = oJuryMember.get();
+                        if(member_.balance < threshold) {
+                            delete _jury[addr];
+                        }
+                    }
+                    _juryStake += member.balance;
+                    _juryCount += 1;
+                    _jury[member.addr] = member;
+                } else {
+                    uint128 threshold = _maxJuryStake - uint128(math.muldivr(_maxJuryStake, 9, 10));
+                    if(member.balance >= threshold) {
+                        _juryStake += member.balance;
+                        _juryCount += 1;
+                        _jury[member.addr] = member;
+                    }
+                }
             }
         }
         if(_tagsPendings.empty()) {
@@ -104,7 +145,7 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
     ContestStage public _stage;
 
     function _changeStage(ContestStage stage) private inline returns (ContestStage) {
-        require(_stage < stage, 103);
+        // require(_stage < stage, 103);
         if (stage == ContestStage.Underway) {
             _underwayEnds = uint32(now) + _underwayDuration;
         }
@@ -165,11 +206,59 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
     }
 
 /* -------------------------------------------------------------------------- */
+/*                            ANCHOR Slashing stage                           */
+/* -------------------------------------------------------------------------- */
+
+
+    mapping(address => uint128) _fishermen;
+    mapping(uint32 => mapping(address => uint128)) _blames;
+
+    function blame(uint32 submissionId, address addrJury) public {
+        require(msg.sender != address(0));
+        require(msg.value > 10 ton);
+        _fishermen[msg.sender] += msg.value;
+        _blames[submissionId][addrJury] += msg.value;
+        if(_blames[submissionId][addrJury] >= _prizePool) {
+            _slashing(submissionId, addrJury);
+        }
+    }
+
+    function _slashing(uint32 submissionId, address addrJury) private {
+        Vote[] sv = _submissionVotes[submissionId];
+        uint8 sum;
+        uint8 upper;
+        uint8 mean;
+        uint8 lower;
+        uint8 score;
+        for(uint8 i = 0; i < sv.length; i++) {
+            if(sv[i].addrJury == addrJury) {
+                score = sv[i].score;
+            } else {
+                sum += sv[i].score;
+            }
+        }
+        mean = uint8(math.divr(sum, sv.length - 1));
+        upper = mean + PERIOD_COEF > 10 ? 10 : mean + PERIOD_COEF;
+        lower = mean - PERIOD_COEF < 0 ? 0 : mean - PERIOD_COEF;
+        if(score < lower || score > upper) {
+            optional(uint32, Vote[]) oSubmissionVotes = _submissionVotes.min();
+            while (oSubmissionVotes.hasValue()) {
+                (uint32 id, Vote[] submissionVotes) = oSubmissionVotes.get();
+                for(uint8 i = 0; i < submissionVotes.length; i++) {
+                    if(submissionVotes[i].addrJury == addrJury) {
+                        delete _submissionVotes[submissionId][i];
+                    }
+                }
+                oSubmissionVotes = _submissionVotes.next(id);
+            }
+        }
+    }
+
+/* -------------------------------------------------------------------------- */
 /*                              ANCHOR Rank stage                             */
 /* -------------------------------------------------------------------------- */
 
     uint128 _pointValue;
-    // TODO: add treshhold
     mapping(address => Reward) public _rewards;
 
     function calcRewards() public {
@@ -182,7 +271,7 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
             }
             optSubmissionVotes = _submissionVotes.next(id);
         }
-        _changeStage(ContestStage.Reward);
+        _changeStage(ContestStage.Slashing);
     }
 
     function _calcPointValue() private inline {
@@ -210,9 +299,9 @@ contract Contest is JuryGroupResolver, IJuryGroupCallback, IBftgRootStoreCallbac
         }
         require(isTagExists, 108);
         _rewards[msg.sender].paid += amount;
-        IBftgRoot(_deployer).registerMemberJuryGroup
+        IBftgRoot(_addrBftgRoot).registerMemberJuryGroup
             {value: amount, bounce: true, flag: 2}
-            (tag, addrJury == address(0) ? msg.sender : addrJury);
+            (tag, addrJury == address(0) ? msg.sender : addrJury, _id);
         msg.sender.transfer(0, true, 64);
     }
 

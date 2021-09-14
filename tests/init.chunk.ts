@@ -4,15 +4,16 @@ import pkgBftgRootStore from '../ton-packages/BftgRootStore.package';
 import pkgBftgRoot from '../ton-packages/BftgRoot.package';
 import pkgJuryGroup from '../ton-packages/JuryGroup.package';
 import pkgContest from '../ton-packages/Contest.package';
-import pkgPadawan from '../ton-packages/Padawan.package';
-import pkgProposal from '../ton-packages/Proposal.package';
 import pkgGroup from '../ton-packages/Group.package';
+import pkgProposal from '../../crystal-smv/ton-packages/Proposal.package';
+import pkgPadawan from '../../crystal-smv/ton-packages/Padawan.package';
 import pkgProposalFactory from '../ton-packages/ProposalFactory.package';
-import pkgSmvRoot from '../ton-packages/SmvRoot.package';
-import pkgSmvRootStore from '../ton-packages/SmvRootStore.package';
+import pkgSmvRootStore from '../../crystal-smv/ton-packages/SmvRootStore.package';
+import pkgSmvRoot from '../../crystal-smv/ton-packages/SmvRoot.package';
 import {expect} from 'chai';
 import {EMPTY_ADDRESS, EMPTY_CODE} from '../utils/constants';
 import {logPubGetter} from '../utils/common';
+import {deployDirectly} from '../crystal-smv/tests/utils';
 
 export default async (
   client: TonClient,
@@ -22,6 +23,7 @@ export default async (
   let smcBftgRoot: TonContract;
   let smcSmvRootStore: TonContract;
   let smcSmvRoot: TonContract;
+  let smcProposalFactory: TonContract;
 
   let keys = await client.crypto.generate_random_sign_keys();
   smcBftgRootStore = new TonContract({
@@ -120,6 +122,26 @@ export default async (
 
   await logPubGetter('BftgRoot inited', smcBftgRoot, '_inited');
 
+  keys = await client.crypto.generate_random_sign_keys();
+  smcSmvRoot = new TonContract({
+    client,
+    name: 'SmvRoot',
+    tonPackage: pkgSmvRoot,
+    keys,
+  });
+
+  await smcSmvRoot.calcAddress();
+
+  smcProposalFactory = await deployDirectly({
+    client,
+    smcSafeMultisigWallet,
+    name: '',
+    tonPackage: pkgProposalFactory,
+    input: {
+      addrSmvRoot: smcSmvRoot.address,
+    },
+  });
+
   let stored = (await smcBftgRoot.run({functionName: 'getStored'})).value;
   expect(Object.keys(stored)).to.have.lengthOf(2);
   expect(stored.codeContest).to.be.not.eq(EMPTY_CODE);
@@ -152,78 +174,20 @@ export default async (
 
   console.log(`SmvRootStore deployed: ${smcSmvRootStore.address}`);
 
-  console.log(`SmvRootStore set Padawan code`);
+  await smcSmvRootStore.call({
+    functionName: 'setProposalCode',
+    input: await client.boc.get_code_from_tvc({tvc: pkgProposal.image}),
+  });
 
   await smcSmvRootStore.call({
     functionName: 'setPadawanCode',
-    input: {
-      code: (await client.boc.get_code_from_tvc({tvc: pkgPadawan.image})).code,
-    },
+    input: await client.boc.get_code_from_tvc({tvc: pkgPadawan.image}),
   });
-
-  console.log(`SmvRootStore set Proposal code`);
 
   await smcSmvRootStore.call({
-    functionName: 'setProposalCode',
-    input: {
-      code: (await client.boc.get_code_from_tvc({tvc: pkgProposal.image})).code,
-    },
+    functionName: 'setProposalFactoryAddr',
+    input: {addr: smcProposalFactory.address},
   });
-
-  console.log(`SmvRootStore set Group code`);
-
-  await smcSmvRootStore.call({
-    functionName: 'setGroupCode',
-    input: {
-      code: (await client.boc.get_code_from_tvc({tvc: pkgGroup.image})).code,
-    },
-  });
-
-  console.log(`SmvRootStore set ProposalFactory code`);
-
-  await smcSmvRootStore.call({
-    functionName: 'setProposalFactoryCode',
-    input: {
-      code: (
-        await client.boc.get_code_from_tvc({tvc: pkgProposalFactory.image})
-      ).code,
-    },
-  });
-
-  console.log(`SmvRootStore set BftgRoot address`);
-
-  await smcSmvRootStore.call({
-    functionName: 'setBftgRootAddr',
-    input: {
-      addr: smcBftgRoot.address,
-    },
-  });
-
-  codes = Object.values(
-    (await smcSmvRootStore.run({functionName: '_codes'})).value._codes,
-  );
-  expect(codes).to.have.lengthOf(4);
-  codes.forEach(code => {
-    expect(code).to.not.be.eq(EMPTY_CODE);
-  });
-
-  addrs = Object.values(
-    (await smcSmvRootStore.run({functionName: '_addrs'})).value._addrs,
-  );
-  expect(addrs).to.have.lengthOf(1);
-  addrs.forEach(addr => {
-    expect(addr).to.not.be.eq(EMPTY_ADDRESS);
-  });
-
-  keys = await client.crypto.generate_random_sign_keys();
-  smcSmvRoot = new TonContract({
-    client,
-    name: 'SmvRoot',
-    tonPackage: pkgSmvRoot,
-    keys,
-  });
-
-  await smcSmvRoot.calcAddress();
 
   await smcSafeMultisigWallet.call({
     functionName: 'sendTransaction',
@@ -247,15 +211,6 @@ export default async (
   console.log(`SmvRoot deployed: ${smcSmvRoot.address}`);
 
   await logPubGetter('SmvRoot inited', smcSmvRoot, '_inited');
-
-  stored = (await smcSmvRoot.run({functionName: 'getStored'})).value;
-  expect(Object.keys(stored)).to.have.lengthOf(6);
-  expect(stored.codePadawan).to.be.not.eq(EMPTY_CODE);
-  expect(stored.codeProposal).to.be.not.eq(EMPTY_CODE);
-  expect(stored.codeGroup).to.be.not.eq(EMPTY_CODE);
-  expect(stored.codeProposalFactory).to.be.not.eq(EMPTY_CODE);
-  expect(stored.addrBftgRoot).to.be.not.eq(EMPTY_ADDRESS);
-  expect(stored.addrProposalFactory).to.be.not.eq(EMPTY_ADDRESS);
 
   return {
     smcBftgRootStore,

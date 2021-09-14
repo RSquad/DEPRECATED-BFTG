@@ -24,8 +24,6 @@ describe('Contest test', () => {
   let smcBftgRoot: TonContract;
   let smcContest: TonContract;
   let smcJuryGroup: TonContract;
-  let smcSmvRootStore: TonContract;
-  let smcSmvRoot: TonContract;
   const pwd = `0x${genRandomHex(64)}`;
 
   before(async () => {
@@ -46,8 +44,6 @@ describe('Contest test', () => {
     const contracts = await initChunk(client, smcSafeMultisigWallet);
     smcBftgRootStore = contracts.smcBftgRootStore;
     smcBftgRoot = contracts.smcBftgRoot;
-    smcSmvRootStore = contracts.smcSmvRootStore;
-    smcSmvRoot = contracts.smcSmvRoot;
   });
 
   it('deploy JuryGroup', async () => {
@@ -86,13 +82,19 @@ describe('Contest test', () => {
   it('deploy Contest', async () => {
     console.log(`Contest deploy`);
 
-    await smcBftgRoot.call({
-      functionName: 'deployContest',
+    await callThroughMultisig({
+      client,
+      smcSafeMultisigWallet,
+      abi: smcBftgRoot.tonPackage.abi,
+      functionName: '_deployContest',
       input: {
         tags: [utf8ToHex('tag'), utf8ToHex('tag2')],
         prizePool: 100_000_000_000,
         underwayDuration: 1000,
+        description: utf8ToHex('description'),
       },
+      dest: smcBftgRoot.address,
+      value: 5_000_000_000,
     });
 
     smcContest = new TonContract({
@@ -102,7 +104,7 @@ describe('Contest test', () => {
       address: (
         await smcBftgRoot.run({
           functionName: 'resolveContest',
-          input: {deployer: smcBftgRoot.address},
+          input: {addrBftgRoot: smcBftgRoot.address, id: 0},
         })
       ).value.addrContest,
     });
@@ -187,6 +189,7 @@ describe('Contest test', () => {
         hiddenScore: utf8ToHex(hiddenScore),
       });
     }
+
     await callThroughMultisig({
       client,
       smcSafeMultisigWallet,
@@ -277,7 +280,7 @@ describe('Contest test', () => {
   });
 
   it('change stage to Rank', async () => {
-    await smcContest.call({functionName: 'changeStage', input: {stage: 5}});
+    await smcContest.call({functionName: 'changeStage', input: {stage: 6}});
 
     await logPubGetter('Stage changed', smcContest, '_stage');
   });

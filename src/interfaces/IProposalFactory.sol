@@ -1,24 +1,18 @@
-pragma ton-solidity >= 0.45.0;
+pragma ton-solidity >= 0.47.0;
 
 struct ContestProposalSpecific {
-    uint32 duration;
+    string[] tags;
+    uint32 underwayDuration;
+    uint128 prizePool;
     string description;
 }
-struct AddMemberProposalSpecific {
-    string nonce;
-    address member;
-}
-struct RemoveMemberProposalSpecific {
-    string nonce;
-    address member;
-}
-
 
 interface IProposalFactory {
     function deployContestProposal(
         address client,
         string title,
-        address group,
+        address[] whiteList,
+        uint128 totalVotes,
         ContestProposalSpecific specific
     ) external;
 }

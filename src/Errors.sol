@@ -1,6 +1,9 @@
-pragma ton-solidity >=0.37.0;
+pragma ton-solidity >= 0.47.0;
 
 library Errors {
+    uint16 constant INVALID_CALLER = 100;
+    uint16 constant INVALID_VALUE = 101;
+
     uint16 constant ONLY_CONTRACT = 1001;
     uint16 constant ONLY_STORE = 1002;
     uint16 constant ONLY_SIGNED = 1003;
@@ -28,7 +31,6 @@ library Errors {
     uint16 constant VOTING_HAS_NOT_ENDED =              403;
 
     uint32 constant NOT_ENOUGH_VOTES =                  500;
-    uint32 constant INVALID_CALLER =                    501;
     uint32 constant DEPOSIT_NOT_FOUND =                 502;
     uint32 constant DEPOSIT_WITH_SUCH_ID_EXISTS =       503;
     uint32 constant PENDING_DEPOSIT_ALREADY_EXISTS =    504;

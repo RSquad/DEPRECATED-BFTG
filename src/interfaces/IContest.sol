@@ -6,6 +6,7 @@ enum ContestStage {
     Underway,
     Voting,
     Reveal,
+    Slashing,
     Rank,
     Reward,
     Finish,
