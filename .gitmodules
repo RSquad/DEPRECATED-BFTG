@@ -1,3 +1,4 @@
 [submodule "crystal-smv"]
 	path = crystal-smv
 	url = git@github.com:RSquad/crystal-smv.git
+	branch = master
